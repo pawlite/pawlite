@@ -1,0 +1,25 @@
+services:
+  pawlite:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # llama-server on the host machine. Taken from .env if set there (use http://host.docker.internal:PORT/v1, not 127.0.0.1).
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:8080/v1}
+      HTTP_HOST: 0.0.0.0
+      # stores agent memory in the pawlite/data folder
+      DATA_DIR: /data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      # media server for Instagram publishing; point your tunnel at http://localhost:8787
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./data:/data
+    stdin_open: true
+    tty: true   # needed to see the WhatsApp QR code on first run
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
