@@ -1,4 +1,6 @@
-# pawlite
+# [pawlite](https://github.com/pawlite/pawlite)
+
+[Link to the PawLite GitHub Repository](https://github.com/pawlite/pawlite)
 
 Tired of the security, performance and token cost issues that come with most autonomous agents, I created this PawLite. It is a locally-run, llama.cpp-compatible companion designed to work with models of all sizes (7B–120B). Pawlite aims to bridge the gap between AI hype and practical reality, serving as a seamless assistant through this technological singularity era.
 
@@ -147,10 +149,10 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
 - Not production-hardened yet: no rate limiting, images and text only (no video/Reels), no encryption of `./data`.
 - Agentmail and Instagram support not fully tested yet.
 - **better-sqlite3** package might give you a warning about a no-longer-supported dependency installed. It comes pre-packaged, you can ignore it and hopefully there will be a new release soon.
-- Next release will focus on refactoring and improving  what is already there.
+- Next release will focus on refactoring and improving  what is already there. Follow the [PawLite GitHub Fepository](https://github.com/pawlite/pawlite) for further updates.
 
 ## License & Author
 
 Distributed under [MIT](LICENSE.txt) license.
 
-Developed by [Yuki Ichinoseki](https://github.com/pawlite)
+[pawlite](https://github.com/pawlite/pawlite) developed by [Yuki Ichinoseki](https://github.com/pawlite)
