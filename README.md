@@ -62,6 +62,8 @@ Forgery check: mail is ignored if the receiving server reports DKIM/DMARC failur
 `AGENTMAIL_INBOX_ID` (the inbox address). Uses the REST API, no IMAP. AgentMail doesn't expose a sender-verification
 verdict this project relies on, so only `EMAIL_ALLOWED` protects you there. Use an obscure inbox address.
 
+**Note** If you're running the agent on your local machine, antivirus software may block nodejs from polling imap servers, like Gmail. If it happens, you'll see an error, when starting the agent. In that scenario you can disable it for a specific domain, e.g. imap.gmail.com.
+
 Both can run at once. Safeguards: allowlist, auto-reply/bulk/`noreply` senders skipped, quoted history stripped,
 de-duplication (never answers the same message twice), and a per-sender reply cap (`EMAIL_MAX_REPLIES_PER_HOUR`) to stop bot-to-bot loops.
 
