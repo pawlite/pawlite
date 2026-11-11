@@ -1,6 +1,6 @@
 {
   "name": "pawlite",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "PawLite - tiny multi-channel autonomous AI agent",

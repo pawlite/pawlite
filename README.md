@@ -6,12 +6,7 @@ Tired of the security, performance and token cost issues that come with most aut
 **Instagram posting**. Send photos in any channel; the agent drafts a caption and, once you confirm,
 publishes the post through Instagram's official Graph API. PawLite is a highly optimized core, consisting of just ~900 lines of TypeScript, no framework, secure (running isolated in a docker container), easy to scale and add skills to.
 
-```
-WhatsApp (Baileys) ─┐                                    ┌→ llama-server (/v1/chat/completions)
-Telegram (Bot API) ─┼→ allowlist → batcher → agent loop ─┤
-Email (IMAP / AgentMail, polled) ─┘      │                             └→ Instagram Graph API ←(fetches JPEG from)─ temp media server ← your tunnel
-                       SQLite (history, images, drafts) + per-chat MEMORY.md
-```
+![image](architecture.png)
 
 ## Why it's small on purpose
 By default each request sends only a ~150-token system prompt, the chat's `MEMORY.md`, capped history, and 3 tiny tools.
