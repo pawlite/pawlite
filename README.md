@@ -2,7 +2,7 @@
 
 [Link to the PawLite GitHub Repository](https://github.com/pawlite/pawlite)
 
-Tired of the security, performance and token cost issues that come with most autonomous agents, I created this PawLite. It is a locally-run, llama.cpp-compatible companion designed to work with models of all sizes (7B–120B). Pawlite aims to bridge the gap between AI hype and practical reality, serving as a seamless assistant through this technological singularity era.
+Tired of the security, performance and token cost issues that come with most autonomous agents, I created PawLite. It is a locally-run, llama.cpp-compatible companion designed to work with models of all sizes (7B–120B). Pawlite aims to bridge the gap between AI hype and practical reality, serving as a seamless assistant through this technological singularity era.
 
 "PawLite is a lightweight autonomous AI agent built to combat the financial, context, and tool bloat found in assistants/agents like OpenClaw and Hermes. **WhatsApp + Telegram + Email ⇄ SQLite ⇄ your local llama.cpp server**, with
 **Instagram posting**. Send photos in any channel; the agent drafts a caption and, once you confirm,
