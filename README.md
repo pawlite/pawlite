@@ -151,7 +151,7 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
 - Not production-hardened yet: no rate limiting, images and text only (no video/Reels), no encryption of `./data`.
 - Agentmail and Instagram support not fully tested yet.
 - **better-sqlite3** package might give you a warning about a no-longer-supported dependency installed. It comes pre-packaged, you can ignore it and hopefully there will be a new release soon.
-- Next release will focus on refactoring and improving  what is already there. Follow the [PawLite GitHub Fepository](https://github.com/pawlite/pawlite) for further updates.
+- Next release will focus on refactoring and improving  what is already there. Follow the [PawLite GitHub Repository](https://github.com/pawlite/pawlite) for further updates.
 
 ## License & Author
 
