@@ -5,8 +5,8 @@
   "type": "module",
   "description": "PawLite - tiny multi-channel autonomous AI agent",
   "scripts": {
-    "start": "NODE_USE_SYSTEM_CA=1 --import tsx --env-file=.env src/index.ts",
-    "chat": "NODE_USE_SYSTEM_CA=1 --import tsx --env-file=.env src/cli.ts",
+    "start": "NODE_USE_SYSTEM_CA=1 tsx --env-file=.env src/index.ts",
+    "chat": "NODE_USE_SYSTEM_CA=1 tsx --env-file=.env src/cli.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
