@@ -4,7 +4,8 @@ import { compactChat, scheduleCompaction } from './compact.js';
 import { chatCompletion, stripReasoning, type Msg, type Part } from './llm.js';
 import { visionDataUrl } from './media.js';
 import { cancelDraft, confirmDraft, createDraft } from './post.js';
-import { canSendEmail, cancelMailDraft, sendMailDraft } from './send-mail.js';
+import { buildSystemPrompt, helpText } from './prompts.js';
+import { canSendEmail, cancelMailDraft, emailIntent, isSendConfirmation, sendMailDraft } from './send-mail.js';
 import { readMemory, runTool, toolDefs, type ToolCtx } from './tools.js';
 import fs from 'node:fs';
 import { clearPendingImages } from './cleanup.js';
@@ -12,33 +13,16 @@ import { clearPendingImages } from './cleanup.js';
 const MAX_TOOL_STEPS = 5;
 
 function systemPrompt(chatId: string): string {
-  const channel = chatId.startsWith('tg:') ? 'Telegram' : chatId.startsWith('em:') ? 'email' : 'WhatsApp';
-  const memory = readMemory(chatId);
-  const summary = getSummary(chatId)?.summary;
-  const waiting = pendingImages(chatId).length;
-  return [
-    `You are ${config.botName}, a concise personal assistant chatting over ${channel}.`,
-    channel === 'WhatsApp'
-      ? 'Keep replies short and plain. Use *single asterisks* for bold; no markdown headings or tables.'
-      : channel === 'email'
-        ? 'You are replying by email: plain text only, no markdown, no subject line, no signature.'
-        : 'Keep replies short and plain text. No markdown formatting.',
-    `Current time: ${new Date().toString()}`,
-    config.igEnabled
-      ? `You can post to Instagram. Images the user has sent and not yet posted: ${waiting}. ` +
-        'When the user wants to post them, write a good caption (hashtags optional) and call prepare_instagram_post. ' +
-        'That only creates a draft; the user must reply /confirm. Never claim something was posted.'
-      : '',
-    canSendEmail()
-      ? 'You CAN send email. If the user asks you to send or email something, call send_email. If they ask you to draft or write one, call draft_email ' +
-        '(it is saved, not sent); when they later say to send it, call send_draft. Never send when they only asked for a draft, and report results honestly. ' +
-        `One recipient per email. Images the user has sent in this chat: ${waiting}; to include them set attach_images=true (they go as attachments). You cannot read or search the inbox.`
-      : '',
-    memory ? `What you remember about this chat:\n${memory}` : '',
-    summary ? `Summary of the earlier conversation:\n${summary}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  return buildSystemPrompt({
+    botName: config.botName,
+    channel: chatId.startsWith('tg:') ? 'Telegram' : chatId.startsWith('em:') ? 'email' : 'WhatsApp',
+    now: new Date(),
+    instagramEnabled: config.igEnabled,
+    emailEnabled: canSendEmail(),
+    waitingImages: pendingImages(chatId).length,
+    memory: readMemory(chatId),
+    summary: getSummary(chatId)?.summary,
+  });
 }
 
 function trimHistory(rows: Row[]): Row[] {
@@ -55,13 +39,6 @@ function trimHistory(rows: Row[]): Row[] {
 
 const clean = stripReasoning;
 
-const HELP =
-  '/new – clear this conversation\n/help – this message\n/memory – show what I remember\n/compact – tidy up memory and summarize old messages\n' +
-  (canSendEmail() ? '/send – send the drafted email\n' : '') +
-  (config.igEnabled
-    ? '/post <caption> – draft an Instagram post from the images you sent\n/confirm – publish the draft\n/cancel – discard the draft\n/clearimages – delete unposted images'
-    : '');
-
 export type RespondOpts = { newImages?: string[] };
 
 export async function respond(chatId: string, rawText: string, opts: RespondOpts = {}): Promise<string> {
@@ -75,7 +52,7 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
       clearChat(chatId);
       return 'Fresh conversation started. (Long-term memory is kept.)';
     case '/help':
-      return HELP;
+      return helpText({ email: canSendEmail(), instagram: config.igEnabled });
     case '/memory': {
       const m = readMemory(chatId).trim();
       return m ? `What I remember:\n${m}` : 'Nothing saved to long-term memory yet.';
@@ -100,6 +77,9 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
   }
   void restWords;
 
+  // A bare "send it" always refers to the pending draft: handled by code, never by the model (which could invent a new email).
+  if (canSendEmail() && isSendConfirmation(text)) return (await sendMailDraft(chatId)).text;
+
   const newImages = opts.newImages ?? [];
   const stored = newImages.length ? `[user sent ${newImages.length} image(s)] ${text}`.trim() : text;
   addMessage(chatId, 'user', stored);
@@ -119,7 +99,7 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
   }
 
   const tools = config.useTools ? toolDefs() : undefined;
-  const ctx: ToolCtx = {};
+  const ctx: ToolCtx = { emailIntent: emailIntent(text) };
 
   try {
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
@@ -127,6 +107,7 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
       if (!reply.tool_calls?.length) {
         let out = clean(typeof reply.content === 'string' ? reply.content : '');
         if (ctx.draftPreview) out = out ? `${out}\n\n${ctx.draftPreview}` : ctx.draftPreview;
+        if (ctx.notice) out = out ? `${out}\n\n${ctx.notice}` : ctx.notice;
         out ||= '(no response)';
         addMessage(chatId, 'assistant', out);
         scheduleCompaction(chatId); // if this chat is now over its token limits, compact it after this reply

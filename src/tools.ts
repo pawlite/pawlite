@@ -4,9 +4,15 @@ import path from 'node:path';
 import { config } from './config.js';
 import type { ToolDef } from './llm.js';
 import { createDraft } from './post.js';
+import { TOOL_TEXT } from './prompts.js';
 import { canSendEmail, createMailDraft, sendMailDraft } from './send-mail.js';
 
-export type ToolCtx = { draftPreview?: string };
+export type ToolCtx = { draftPreview?: string
+  /** Ground-truth status of an email action, appended to the reply by code (not by the model). */
+  notice?: string;
+  /** What the user's own message asked for; overrides the model's choice between send_email and draft_email. */
+  emailIntent?: 'send' | 'draft';
+};
 
 export const chatDir = (chatId: string): string => {
   const dir = path.join(config.dataDir, 'chats', chatId.replace(/[^a-zA-Z0-9._-]/g, '_'));
@@ -25,10 +31,10 @@ export function toolDefs(): ToolDef[] {
       type: 'function',
       function: {
         name: 'remember',
-        description: 'Save a short durable fact about the user or their preferences to long-term memory.',
+        description: TOOL_TEXT.remember.description,
         parameters: {
           type: 'object',
-          properties: { note: { type: 'string', description: 'One concise fact to remember' } },
+          properties: { note: { type: 'string', description: TOOL_TEXT.remember.note } },
           required: ['note'],
         },
       },
@@ -37,7 +43,7 @@ export function toolDefs(): ToolDef[] {
       type: 'function',
       function: {
         name: 'get_time',
-        description: 'Get the current date and time.',
+        description: TOOL_TEXT.get_time.description,
         parameters: { type: 'object', properties: {} },
       },
     },
@@ -47,60 +53,30 @@ export function toolDefs(): ToolDef[] {
       type: 'function',
       function: {
         name: 'prepare_instagram_post',
-        description:
-          'Draft an Instagram post from the images the user sent that are still waiting. Does NOT publish: the user must confirm with /confirm.',
+        description: TOOL_TEXT.prepare_instagram_post.description,
         parameters: {
           type: 'object',
-          properties: { caption: { type: 'string', description: 'Final caption text, max 2200 chars, up to 30 hashtags' } },
+          properties: { caption: { type: 'string', description: TOOL_TEXT.prepare_instagram_post.caption } },
           required: ['caption'],
         },
       },
     });
   }
   if (canSendEmail()) {
+    const emailParameters = {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: TOOL_TEXT.emailParams.to },
+        subject: { type: 'string' },
+        body: { type: 'string', description: TOOL_TEXT.emailParams.body },
+        attach_images: { type: 'boolean', description: TOOL_TEXT.emailParams.attach_images },
+      },
+      required: ['to', 'subject', 'body'],
+    };
     defs.push(
-      {
-        type: 'function',
-        function: {
-          name: 'send_email',
-          description: 'Send a NEW email to one recipient immediately. Use only when the user asks you to SEND/email something.',
-          parameters: {
-          type: 'object',
-          properties: {
-            to: { type: 'string', description: 'One recipient email address' },
-            subject: { type: 'string' },
-            body: { type: 'string', description: 'Plain-text body, no markdown' },
-            attach_images: { type: 'boolean', description: 'true to attach the images the user has sent in this chat' },
-          },
-          required: ['to', 'subject', 'body'],
-        },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'draft_email',
-          description: 'Write a NEW email and save it as a draft WITHOUT sending. Use when the user asks you to draft/write/prepare an email.',
-          parameters: {
-          type: 'object',
-          properties: {
-            to: { type: 'string', description: 'One recipient email address' },
-            subject: { type: 'string' },
-            body: { type: 'string', description: 'Plain-text body, no markdown' },
-            attach_images: { type: 'boolean', description: 'true to attach the images the user has sent in this chat' },
-          },
-          required: ['to', 'subject', 'body'],
-        },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'send_draft',
-          description: 'Send the email draft saved earlier by draft_email. Use when the user says to send the draft.',
-          parameters: { type: 'object', properties: {} },
-        },
-      },
+      { type: 'function', function: { name: 'send_email', description: TOOL_TEXT.send_email.description, parameters: emailParameters } },
+      { type: 'function', function: { name: 'draft_email', description: TOOL_TEXT.draft_email.description, parameters: emailParameters } },
+      { type: 'function', function: { name: 'send_draft', description: TOOL_TEXT.send_draft.description, parameters: { type: 'object', properties: {} } } },
     );
   }
   if (config.enableShell) {
@@ -108,7 +84,7 @@ export function toolDefs(): ToolDef[] {
       type: 'function',
       function: {
         name: 'shell',
-        description: 'Run a bash command in this chat\'s working directory (30s timeout).',
+        description: TOOL_TEXT.shell.description,
         parameters: {
           type: 'object',
           properties: { command: { type: 'string' } },
@@ -131,6 +107,9 @@ export async function runTool(chatId: string, name: string, rawArgs: string, ctx
     case 'remember': {
       const note = String(args.note ?? '').trim().slice(0, 500);
       if (!note) return 'Error: empty note.';
+      if (/pass(word|code)|api[ _-]?key|secret|token|\b\d{13,19}\b/i.test(note)) return 'Error: not saving sensitive data. Do not retry.';
+      const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (readMemory(chatId).split('\n').some((l) => norm(l.replace(/^- /, '')) === norm(note))) return 'Already saved.';
       fs.appendFileSync(path.join(chatDir(chatId), 'MEMORY.md'), `- ${note}\n`);
       return 'Saved.';
     }
@@ -140,21 +119,25 @@ export async function runTool(chatId: string, name: string, rawArgs: string, ctx
       ctx.draftPreview = r.text;
       return 'Draft saved. The system will show the user the draft and ask them to /confirm. Do NOT say it has been posted.';
     }
-    case 'send_email': {
-      const r = createMailDraft(chatId, String(args.to ?? ''), String(args.subject ?? ''), String(args.body ?? ''), args.attach_images === true);
-      if (!r.ok) return `Error: ${r.text}`;
-      const sent = await sendMailDraft(chatId);
-      return sent.ok ? sent.text : `Not sent. ${sent.text}`;
-    }
+    case 'send_email':
     case 'draft_email': {
+      const mode = ctx.emailIntent ?? (name === 'send_email' ? 'send' : 'draft');
       const r = createMailDraft(chatId, String(args.to ?? ''), String(args.subject ?? ''), String(args.body ?? ''), args.attach_images === true);
       if (!r.ok) return `Error: ${r.text}`;
+      if (mode === 'send') {
+        const sent = await sendMailDraft(chatId);
+        ctx.notice = sent.text;
+        return sent.ok
+          ? `${sent.text} It is already delivered. Do not call it a draft and do not mention /send.`
+          : `Not sent. ${sent.text}`;
+      }
       ctx.draftPreview = r.text;
       return 'Draft saved (NOT sent). The user will see it. They can tell you to send it, or reply /send.';
     }
     case 'send_draft': {
       const sent = await sendMailDraft(chatId);
-      return sent.ok ? sent.text : `Not sent. ${sent.text}`;
+      ctx.notice = sent.text;
+      return sent.ok ? `${sent.text} It is already delivered. Do not mention /send.` : `Not sent. ${sent.text}`;
     }
     case 'get_time':
       return new Date().toString();

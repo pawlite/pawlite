@@ -86,17 +86,30 @@ export async function startTelegram(): Promise<void> {
   }
 
   let offset = 0;
+  let failures = 0;
   void (async () => {
     for (;;) {
       try {
-        const updates = await call<TgUpdate[]>('getUpdates', { offset, timeout: 50, allowed_updates: ['message'] }, 70_000);
+        const updates = await call<TgUpdate[]>('getUpdates', { offset, timeout: 25, allowed_updates: ['message'] }, 45_000);
+        failures = 0;
         for (const u of updates) {
           offset = u.update_id + 1;
           if (u.message) void handle(u.message).catch((e) => console.error('Telegram handler error:', e));
         }
       } catch (e) {
-        console.error('Telegram polling error:', e instanceof Error ? e.message : e);
-        await sleep(5000);
+        failures++;
+        // "fetch failed" hides the real reason (DNS, connection reset, certificate...) in e.cause
+        const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`Telegram polling error (${failures} in a row): ${msg}${cause ? ` [${cause.code ?? cause.message}]` : ''}`);
+        // After sleep/network changes, Node can keep dead sockets or a stale DNS state until restart. Exit so Docker
+        // (restart: unless-stopped) starts a fresh process instead of retrying forever.
+        if (failures >= 12) {
+          console.error('Telegram: still unreachable after about 2 minutes; exiting so the container restarts.');
+          process.exit(1);
+        }
+        // a one-off connection reset (idle long-poll dropped) is retried almost immediately
+        await sleep(cause?.code === 'ECONNRESET' && failures === 1 ? 1000 : Math.min(5000 * failures, 15_000));
       }
     }
   })();

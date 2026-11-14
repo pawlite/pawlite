@@ -1,3 +1,4 @@
+import { memoryRewritePrompt, summaryInput, summaryPrompt } from './prompts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
@@ -52,10 +53,7 @@ export async function compactMemory(chat: string, force = false): Promise<string
 
   const targetChars = Math.floor(config.compactMemoryTokens * config.charsPerToken * 0.7); // aim comfortably below the limit
   const out = await ask(
-    "You clean up an assistant's long-term memory notes about a user. Rewrite the notes as a deduplicated list of short bullets. " +
-      'Keep every distinct fact (names, numbers, dates, preferences, standing instructions). Merge duplicates. ' +
-      'If two notes contradict each other, keep only the later one. Do not invent anything. ' +
-      `Aim for under ${targetChars} characters. Output ONLY the bullets, each starting with "- ".`,
+    memoryRewritePrompt(targetChars),
     original,
     1500,
   );
@@ -102,10 +100,8 @@ export async function compactHistory(chat: string, force = false): Promise<strin
   const previous = getSummary(chat)?.summary ?? '';
   const summary = (
     await ask(
-      'You maintain a running summary of a chat between a user and an assistant. Merge the previous summary with the new messages ' +
-        "into one updated summary. Keep the user's goals, decisions, open tasks, names, dates, preferences and anything promised. " +
-        `Drop greetings and small talk. Plain text, at most ${config.compactSummaryWords} words. Output ONLY the summary.`,
-      `Previous summary:\n${previous || '(none)'}\n\nNew messages:\n${lines.join('\n')}`,
+      summaryPrompt(config.compactSummaryWords),
+      summaryInput(previous, lines.join('\n')),
       700,
     )
   ).slice(0, 4000);

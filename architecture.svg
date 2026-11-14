@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1620 850" width="1620" height="850" font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+    <style>
+      .box{fill:#fff;stroke:#8a8f98;stroke-width:1.5}
+      .ch{fill:#e8f3ff;stroke:#4a90d9;stroke-width:1.5}
+      .core{fill:#eef7ee;stroke:#4a9a5a;stroke-width:1.5}
+      .ext{fill:#fff4e5;stroke:#d9922e;stroke-width:1.5}
+      .db{fill:#f3eefb;stroke:#8a63c7;stroke-width:1.5}
+      .t{font-size:19px;font-weight:700;fill:#1c1f24}
+      .s{font-size:15px;fill:#3b4047}
+      .l{font-size:14px;fill:#555;font-style:italic}
+      .ln{stroke:#555;stroke-width:2;fill:none}
+    </style>
+  </defs>
+  <rect width="1620" height="850" fill="#fafafa"/>
+  <text x="40" y="46" class="t" style="font-size:28px;font-weight:500">🐾</text> 
+  <text x="73" y="42" class="t" style="font-size:28px;font-weight:500">pawlite/</text>
+  <text x="168" y="42" class="t" style="font-size:28px">agent</text>
+
+  <!-- replies return path -->
+  <path d="M1070,120 V86 H170 V140" class="ln" stroke-dasharray="7 5" marker-end="url(#a)"/>
+  <text x="620" y="78" class="l" text-anchor="middle">replies go back on the same channel (WhatsApp, Telegram or email)</text>
+
+  <!-- channels -->
+  <rect x="40" y="140" width="260" height="90" rx="10" class="ch"/>
+  <text x="60" y="173" class="t">WhatsApp</text><text x="60" y="200" class="s">Baileys · text + images</text>
+  <rect x="40" y="260" width="260" height="90" rx="10" class="ch"/>
+  <text x="60" y="293" class="t">Telegram</text><text x="60" y="320" class="s">Bot API polling · text + images</text>
+  <rect x="40" y="380" width="260" height="90" rx="10" class="ch"/>
+  <text x="60" y="413" class="t">Email</text><text x="60" y="440" class="s">Gmail (IMAP/SMTP) or AgentMail</text>
+  <path d="M300,185 H360" class="ln" marker-end="url(#a)"/>
+  <path d="M300,305 H360" class="ln" marker-end="url(#a)"/>
+  <path d="M300,425 H360" class="ln" marker-end="url(#a)"/>
+
+  <!-- gate -->
+  <rect x="360" y="120" width="230" height="370" rx="10" class="box"/>
+  <text x="380" y="153" class="t">Allowlist &amp; checks</text>
+  <text x="380" y="190" class="s">Allowed phone numbers</text>
+  <text x="380" y="214" class="s">Allowed Telegram IDs</text>
+  <text x="380" y="238" class="s">EMAIL_ALLOWED senders</text>
+  <text x="380" y="282" class="s">Email only:</text>
+  <text x="380" y="306" class="s">· DKIM/DMARC check</text>
+  <text x="380" y="330" class="s">· no auto-replies/noreply</text>
+  <text x="380" y="354" class="s">· reply-rate cap</text>
+  <text x="380" y="378" class="s">· de-duplication</text>
+  <path d="M590,305 H650" class="ln" marker-end="url(#a)"/>
+
+  <!-- batcher -->
+  <rect x="650" y="215" width="220" height="180" rx="10" class="core"/>
+  <text x="670" y="248" class="t">Batcher + queue</text>
+  <text x="670" y="280" class="s">Groups photos + text</text>
+  <text x="670" y="304" class="s">Photos saved as JPEG</text>
+  <text x="670" y="328" class="s">One job at a time</text>
+  <text x="670" y="352" class="s">(no mixing of emails)</text>
+  <path d="M870,305 H930" class="ln" marker-end="url(#a)"/>
+
+  <!-- agent -->
+  <rect x="930" y="120" width="300" height="240" rx="10" class="core"/>
+  <text x="950" y="153" class="t">Agent loop</text>
+  <text x="950" y="186" class="s">Small prompt (~120-300 tokens) +</text>
+  <text x="950" y="208" class="s">chat memory + capped history</text>
+  <text x="950" y="244" class="s" font-weight="700">Commands</text>
+  <text x="950" y="268" class="s">/new  /help  /memory  /compact</text>
+  <text x="950" y="292" class="s">/post  /confirm  /send  /cancel</text>
+  <text x="950" y="316" class="s">/clearimages</text>
+  <path d="M1080,360 V400" class="ln" marker-end="url(#a)"/>
+
+  <!-- tools -->
+  <rect x="930" y="400" width="300" height="220" rx="10" class="core"/>
+  <text x="950" y="433" class="t">Tools</text>
+  <text x="950" y="466" class="s">remember · get_time</text>
+  <text x="950" y="494" class="s">prepare_instagram_post</text>
+  <text x="950" y="518" class="s" fill="#888">   (posts only after /confirm)</text>
+  <text x="950" y="546" class="s">send_email · draft_email · send_draft</text>
+  <text x="950" y="570" class="s" fill="#888">   (optional photo attachments)</text>
+  <text x="950" y="598" class="s">optional shell tool (off by default)</text>
+
+  <!-- llama -->
+  <rect x="1330" y="120" width="270" height="100" rx="10" class="ext"/>
+  <text x="1350" y="153" class="t">llama-server</text><text x="1350" y="182" class="s">your local llama.cpp</text><text x="1350" y="202" class="s">OpenAI-compatible /v1</text>
+  <path d="M1230,170 H1330" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+
+  <!-- media server + IG -->
+  <rect x="1330" y="270" width="270" height="90" rx="10" class="ext"/>
+  <text x="1350" y="303" class="t">Temp media server</text><text x="1350" y="330" class="s">port 8787 + your tunnel</text><text x="1350" y="350" class="s">(PUBLIC_BASE_URL)</text>
+  <rect x="1330" y="410" width="270" height="90" rx="10" class="ext"/>
+  <text x="1350" y="443" class="t">Instagram Graph API</text><text x="1350" y="470" class="s">official publishing</text>
+  <path d="M1465,410 V362" class="ln" marker-end="url(#a)"/>
+  <text x="1475" y="392" class="l">fetches JPEG</text>
+  <path d="M1230,455 H1330" class="ln" marker-end="url(#a)"/>
+
+  <!-- mail out -->
+  <rect x="1330" y="540" width="270" height="90" rx="10" class="ext"/>
+  <text x="1350" y="573" class="t">Outgoing email</text><text x="1350" y="600" class="s">Gmail SMTP or AgentMail API</text>
+  <path d="M1230,585 H1330" class="ln" marker-end="url(#a)"/>
+
+  <!-- storage -->
+  <path d="M1080,620 V690" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="1095" y="662" class="l">reads / writes</text>
+  <rect x="360" y="690" width="870" height="140" rx="10" class="db"/>
+  <text x="380" y="722" class="t" style="font-size:17px">Storage (data/ folder)</text>
+  <rect x="380" y="738" width="260" height="76" rx="8" class="box"/>
+  <text x="394" y="763" class="s" font-weight="700">SQLite</text>
+  <text x="394" y="785" class="s" style="font-size:13px">messages · images · drafts</text>
+  <text x="394" y="803" class="s" style="font-size:13px">summaries · mail drafts</text>
+  <rect x="660" y="738" width="270" height="76" rx="8" class="box"/>
+  <text x="674" y="763" class="s" font-weight="700">Per-chat MEMORY.md</text>
+  <text x="674" y="785" class="s" style="font-size:13px">wa: · tg: · em: chats are</text>
+  <text x="674" y="803" class="s" style="font-size:13px">kept separate</text>
+  <rect x="950" y="738" width="260" height="76" rx="8" class="box"/>
+  <text x="964" y="763" class="s" font-weight="700">Compaction</text>
+  <text x="964" y="785" class="s" style="font-size:13px">rewrites memory, folds old</text>
+  <text x="964" y="803" class="s" style="font-size:13px">history into a summary</text>
+</svg>

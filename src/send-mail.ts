@@ -19,11 +19,12 @@ function sender(): { via: 'imap' | 'agentmail'; address: string } | undefined {
 
 export const canSendEmail = (): boolean => sender() !== undefined;
 
+const lastSent = new Map<string, { to: string; subject: string; at: number }>();
 const sentLog: number[] = [];
 const overLimit = (): boolean => {
   const now = Date.now();
   while (sentLog.length && now - sentLog[0] > 3600_000) sentLog.shift();
-  return sentLog.length >= config.emailMaxRepliesPerHour;
+  return sentLog.length >= config.emailMaxPerHour;
 };
 
 /** Validate and store a draft. Nothing is sent until the user runs /send. */
@@ -52,7 +53,15 @@ export function createMailDraft(chat: string, toRaw: string, subjectRaw: string,
 
 export async function sendMailDraft(chat: string): Promise<{ ok: boolean; text: string }> {
   const d = getMailDraft(chat);
-  if (!d) return { ok: false, text: 'There is no email draft to send.' };
+  if (!d) {
+    const ls = lastSent.get(chat);
+    if (ls && Date.now() - ls.at < 24 * 3600_000)
+      return {
+        ok: false,
+        text: `Nothing to send: no draft is pending. The email to ${ls.to} ("${ls.subject}") was already sent at ${new Date(ls.at).toLocaleTimeString()}; check the Sent folder.`,
+      };
+    return { ok: false, text: 'There is no email draft to send.' };
+  }
   if (Date.now() - d.ts > DRAFT_TTL_MS) {
     clearMailDraft(chat);
     return { ok: false, text: 'That draft expired (1 hour). Ask me to write it again.' };
@@ -70,12 +79,13 @@ export async function sendMailDraft(chat: string): Promise<{ ok: boolean; text: 
   });
   if (files.some((f) => !fs.existsSync(f.path))) return { ok: false, text: 'An attached image file is missing. Ask me to write the email again.' };
   if (total > MAX_ATTACH_BYTES) return { ok: false, text: `Attachments total ${(total / 1048576).toFixed(1)} MB; the limit is 20 MB. Attach fewer images.` };
-  if (overLimit()) return { ok: false, text: `Hourly email limit reached (EMAIL_MAX_REPLIES_PER_HOUR=${config.emailMaxRepliesPerHour}). Try later; the draft is kept.` };
+  if (overLimit()) return { ok: false, text: `Hourly email limit reached (EMAIL_MAX_PER_HOUR=${config.emailMaxPerHour}). Try later; the draft is kept.` };
   try {
     // Imported lazily to avoid an import cycle (mail provider -> mail-core -> agent -> tools -> here).
     if (from.via === 'imap') await (await import('./email-imap.js')).sendViaImap(d.to, d.subject, d.body, files);
     else await (await import('./email-agentmail.js')).sendViaAgentMail(d.to, d.subject, d.body, files);
     sentLog.push(Date.now());
+    lastSent.set(chat, { to: d.to, subject: d.subject, at: Date.now() });
     clearMailDraft(chat);
     return { ok: true, text: `✅ Email sent to ${d.to}.` };
   } catch (e) {
@@ -88,3 +98,20 @@ export function cancelMailDraft(chat: string): boolean {
   clearMailDraft(chat);
   return true;
 }
+
+/**
+ * Decide from the USER's words (not the model's tool choice) whether an email should be sent now or saved as a draft.
+ * Default is to send; drafting happens only when the user clearly asks for a draft / to review first.
+ */
+export function emailIntent(userText: string): 'send' | 'draft' {
+  const t = userText.replace(/^\[Email subject:[^\n]*\]\n?/, '').toLowerCase();
+  if (/\b(don'?t|do not|dont|no need to|without)\s+(to\s+)?send/.test(t)) return 'draft';
+  if (/\bbefore\s+(you\s+)?send/.test(t) || /\b(show|let)\s+me\s+(see|review|check|read|approve)\b/.test(t)) return 'draft';
+  if (/\b(send|sent)\b/.test(t)) return 'send';
+  if (/\b(draft|compose|write|prepare|preview)\b/.test(t)) return 'draft';
+  return 'send';
+}
+
+/** "send it", "ok send", "go ahead and send the draft" ... */
+export const isSendConfirmation = (userText: string): boolean =>
+  /^(?:(?:go ahead(?: and)?|yes|yeah|yep|ok|okay|sure|please)[\s,.!]*)*send(?: it| that| this| the (?:email|draft|mail|message))?(?: now| please)?[\s.!]*$/i.test(userText.trim());

@@ -34,12 +34,12 @@ export const config = {
   vision: bool('LLM_VISION', false),
   enableShell: bool('ENABLE_SHELL', false),
   botName: env('BOT_NAME', 'Claw'),
-  historyChars: Number(env('HISTORY_CHARS', '12000')),
+  historyChars: Number(env('HISTORY_CHARS', '16000')),
 
   // Compaction. Sizes are ESTIMATED tokens (characters / COMPACT_CHARS_PER_TOKEN); /compact always works.
   compactEnabled: bool('COMPACT_ENABLED', true), // automatic compaction after replies (and the optional timer)
-  compactHistoryTokens: Number(env('COMPACT_HISTORY_TOKENS', '2500')), // summarize old messages above this
-  compactMemoryTokens: Number(env('COMPACT_MEMORY_TOKENS', '900')), // rewrite MEMORY.md above this
+  compactHistoryTokens: Number(env('COMPACT_HISTORY_TOKENS', '3500')), // summarize old messages above this
+  compactMemoryTokens: Number(env('COMPACT_MEMORY_TOKENS', '1500')), // rewrite MEMORY.md above this
   compactKeepMessages: Number(env('COMPACT_KEEP_MESSAGES', '10')), // newest messages always kept verbatim
   charsPerToken: Math.max(1, Number(env('COMPACT_CHARS_PER_TOKEN', '4'))), // ~4 for English; use 2-3 for CJK/emoji-heavy chats
   compactIntervalMinutes: Number(env('COMPACT_INTERVAL_MINUTES', '0')), // optional backstop timer; 0 = off
@@ -64,7 +64,7 @@ export const config = {
   // Sending NEW email (send_email tool + /send). By default only to addresses in EMAIL_ALLOWED.
   emailSendAny: bool('EMAIL_SEND_ANY', false),
   emailSendVia: env('EMAIL_SEND_VIA').toLowerCase(), // 'imap' | 'agentmail' | '' (auto)
-  emailMaxRepliesPerHour: posNum('EMAIL_MAX_REPLIES_PER_HOUR', 20),
+  emailMaxPerHour: posNum('EMAIL_MAX_PER_HOUR', 20), // applied to replies per sender and to emails sent in total
   imapErrorLogger: ["1", "true", "yes", "on"].includes(
       (env("IMAP_ERROR_LOGGER") ?? "").toLowerCase()
   )
