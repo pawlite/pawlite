@@ -5,6 +5,7 @@ import { chatCompletion, stripReasoning, type Msg, type Part } from './llm.js';
 import { visionDataUrl } from './media.js';
 import { cancelDraft, confirmDraft, createDraft } from './post.js';
 import { buildSystemPrompt, helpText } from './prompts.js';
+import { draftEmailFromRequest, looksLikeDraftRequest } from './draft-email.js';
 import { canSendEmail, cancelMailDraft, emailIntent, isSendConfirmation, sendMailDraft } from './send-mail.js';
 import { readMemory, runTool, toolDefs, type ToolCtx } from './tools.js';
 import fs from 'node:fs';
@@ -15,7 +16,7 @@ const MAX_TOOL_STEPS = 5;
 function systemPrompt(chatId: string): string {
   return buildSystemPrompt({
     botName: config.botName,
-    channel: chatId.startsWith('tg:') ? 'Telegram' : chatId.startsWith('em:') ? 'email' : 'WhatsApp',
+    channel: chatId === 'cli' ? 'terminal' : chatId.startsWith('tg:') ? 'Telegram' : chatId.startsWith('em:') ? 'email' : 'WhatsApp',
     now: new Date(),
     instagramEnabled: config.igEnabled,
     emailEnabled: canSendEmail(),
@@ -80,6 +81,14 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
   // A bare "send it" always refers to the pending draft: handled by code, never by the model (which could invent a new email).
   if (canSendEmail() && isSendConfirmation(text)) return (await sendMailDraft(chatId)).text;
 
+  // "Draft an email to x@y ...": handled by code (the model only fills in to/subject/body), so the draft really gets saved.
+  if (canSendEmail() && !config.emailAutoSend && !(opts.newImages ?? []).length && looksLikeDraftRequest(text)) {
+    addMessage(chatId, 'user', text);
+    const out = await draftEmailFromRequest(chatId, text);
+    addMessage(chatId, 'assistant', out);
+    return out;
+  }
+
   const newImages = opts.newImages ?? [];
   const stored = newImages.length ? `[user sent ${newImages.length} image(s)] ${text}`.trim() : text;
   addMessage(chatId, 'user', stored);
@@ -101,12 +110,14 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
   const tools = config.useTools ? toolDefs() : undefined;
   const ctx: ToolCtx = { emailIntent: emailIntent(text) };
 
+  let calledTool = false;
   try {
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
       const reply = await chatCompletion(messages, tools);
       if (!reply.tool_calls?.length) {
+        if (!calledTool && /e-?mail|draft|send/i.test(text)) console.log(`[tools] ${chatId}: no tool was called for: ${text.slice(0, 80).replace(/\s+/g, ' ')}`);
         let out = clean(typeof reply.content === 'string' ? reply.content : '');
-        if (ctx.draftPreview) out = out ? `${out}\n\n${ctx.draftPreview}` : ctx.draftPreview;
+        if (ctx.draftPreview) out = ctx.draftPreview; // the model may wrongly say "sent"; the draft preview is the truth
         if (ctx.notice) out = out ? `${out}\n\n${ctx.notice}` : ctx.notice;
         out ||= '(no response)';
         addMessage(chatId, 'assistant', out);
@@ -116,6 +127,8 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
       messages.push(reply);
       for (const call of reply.tool_calls) {
         const result = await runTool(chatId, call.function.name, call.function.arguments, ctx);
+        calledTool = true;
+        console.log(`[tools] ${chatId}: ${call.function.name} -> ${result.slice(0, 100).replace(/\s+/g, ' ')}`);
         messages.push({ role: 'tool', tool_call_id: call.id, content: result });
       }
     }

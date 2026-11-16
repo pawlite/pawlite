@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { receive, type Reply } from './inbound.js';
+import { isSendConfirmation } from './send-mail.js';
 
 export type Mail = {
   from: string; // bare, lower-case address
@@ -78,6 +79,11 @@ export async function dispatch(mail: Mail, own: string, reply: (text: string) =>
   const body = stripQuoted(mail.body);
   if (!body && !mail.images.length) {
     console.log(`Ignored email from ${from}: no new text after removing quoted history`);
+    return;
+  }
+  // Commands and "send it" skip the model, so they need a positively passed DKIM/DMARC check (not just "not failed").
+  if (config.emailRequireAuth && mail.authPassed !== true && (body.startsWith('/') || isSendConfirmation(body))) {
+    console.log(`Ignored command from ${from}: sender not verified (DKIM/DMARC) and EMAIL_REQUIRE_AUTH is on`);
     return;
   }
   // Keep slash-commands (/confirm, /post …) clean; otherwise give the model the subject as context.

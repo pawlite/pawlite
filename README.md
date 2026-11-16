@@ -11,7 +11,7 @@ publishes the post through Instagram's official Graph API. PawLite is a highly o
 ![PawLite architecture](architecture.svg)
 
 ## Why it's small on purpose
-By default each request sends only a 120~300 tokens system prompt, the chat's `MEMORY.md`, capped history, and 3 tiny tools.
+By default each request sends only a ~180-360 tokens system prompt, the chat's `MEMORY.md`, capped history, and 3 tiny tools.
 Compare that with the ~70K tokens an "agent platform" sends per turn: prefill on a local model drops from tens of
 seconds to a second or two.
 
@@ -44,8 +44,8 @@ Settings → Linked Devices. (`PAIRING_PHONE` gives you a code instead of a QR. 
 
 ### Email (Gmail and/or AgentMail)
 The bot **polls** the mailbox (default every 120 s), answers mail from addresses in `EMAIL_ALLOWED`, and replies in the
-same thread, marking handled mail as read. It answers people who write to it only if their email is in the `EMAIL_ALLOWED` list; it doesn't sit in your personal inbox or
-send unprompted mail. Image attachments work, so you can email photos to post on Instagram, then reply `/confirm`.
+same thread, marking handled mail as read. It answers people who write to it only if their email is in the `EMAIL_ALLOWED` list; it doesn't read your other personal emails or
+send unprompted mail; it only sends when you ask for it in a chat (see [Sending email](#sending-email)). Image attachments work, so you can email photos to post on Instagram, then reply `/confirm`.
 
 **Gmail (or any IMAP/SMTP mailbox).** Create a *dedicated* account, turn on 2-Step Verification. For Gmail follow the steps below:
 1. Generate a **App Password**
@@ -58,7 +58,10 @@ send unprompted mail. Image attachments work, so you can email photos to post on
 Set `IMAP_USER` + `IMAP_PASSWORD`. The Gmail hosts are the defaults; for Fastmail or
 your own domain, change `IMAP_HOST` / `SMTP_HOST`. If it can't connect, check that IMAP is enabled for the account.
 Workspace admins can block app passwords.
-Forgery check: mail is ignored if the receiving server reports DKIM/DMARC failure (`EMAIL_REQUIRE_AUTH=true`).
+Forgery check: mail is ignored if the receiving server reports DKIM/DMARC failure (`EMAIL_REQUIRE_AUTH=true`). Commands
+(`/send`, `/confirm`, ...) and "send it" by email additionally need a **passed** DKIM/DMARC result: with Gmail/IMAP that is
+normally the case, but AgentMail reports no result, so over AgentMail confirm from Telegram/WhatsApp (or set `EMAIL_REQUIRE_AUTH=false`,
+which turns off both checks).
 
 **AgentMail.** Create an inbox and an API key in the AgentMail console; set `AGENTMAIL_API_KEY` and
 `AGENTMAIL_INBOX_ID` (the inbox address). Uses the REST API, no IMAP. AgentMail doesn't expose a sender-verification
@@ -121,14 +124,20 @@ and a photo needs that mention in its caption. For multi-image posts, use a dire
 ## Sending email
 Works from any channel (WhatsApp, Telegram or email) once Gmail or AgentMail is configured.
 
-- *"Email bob@example.com that I'll be late"* → **sends right away**.
-- *"Draft an email to bob@example.com about lunch"* → saves a **draft** and shows it. Say *"send it"* (or `/send`) to send,
-  `/cancel` to discard. Drafts expire after an hour.
+- *"Email bob@example.com that I'll be late"* → saves a **draft** and shows it. Reply `/send` to send it (or say *"send it"*;
+  over email use `/send`), `/cancel` to discard. Drafts expire after an hour. The model can never send by itself.
+- *"Draft an email to bob@example.com saying I'll be late, subject Late"* (or *"... to Anna ..."*) → **drafted by code**: the model
+  only fills in recipient, subject and body (`src/draft-email.ts`), and the code saves the draft, so the draft always exists
+  when the preview is shown. With a name instead of an address, the address must be in the chat's memory (say *"Anna's email is
+  anna@example.com, remember it"*) and still be in `EMAIL_ALLOWED`; the model may not invent one. If it can't find an address,
+  it says so and saves nothing. This path is used while `EMAIL_AUTO_SEND=false`.
+- Set `EMAIL_AUTO_SEND=true` to get the old behaviour back: *"Email bob that I'll be late"* then **sends right away**.
 - *"Send these photos to bob@example.com"* → the photos you sent in this chat (up to 10, 20 MB total) go along as
   attachments named `image-1.jpg`, `image-2.jpg`, … They are full-frame copies, not the padded Instagram versions.
 
-**Send or draft is decided by your words, not by the model.** Small models pick between tools unreliably, so the code reads
-your message (`emailIntent` in `src/send-mail.ts`): it **sends by default**, and drafts only if you say draft / write /
+**Sending needs your confirmation by default** (`EMAIL_AUTO_SEND=false`), so a prompt injection hidden in pasted or forwarded
+text cannot make the bot send mail. With `EMAIL_AUTO_SEND=true`, **send or draft is decided by your words, not by the model.**
+Small models pick between tools unreliably, so the code reads your message (`emailIntent` in `src/send-mail.ts`): it **sends by default**, and drafts only if you say draft / write /
 compose / prepare / preview, ask to see it first, or say "don't send". If you also say "send", it sends. A bare "send it"
 is handled by code too, so the model can't invent a new email. After every send the bot appends the real result
 (`✅ Email sent to …` or the error), so the model's wording can't mislead you.
@@ -136,7 +145,7 @@ is handled by code too, so the model can't invent a new email. After every send 
 Rules:
 - Recipients must be in `EMAIL_ALLOWED`, unless you set `EMAIL_SEND_ANY=true`. One recipient per email, body ≤ 5,000 characters.
 - It sends from Gmail if configured, otherwise AgentMail. If both are set, `EMAIL_SEND_VIA=imap|agentmail` picks one.
-- `EMAIL_MAX_REPLIES_PER_HOUR` (default **20**; a missing, empty or invalid value also gives 20) is applied twice, with
+- `EMAIL_MAX_PER_HOUR` (default **20**; a missing, empty or invalid value also gives 20) is applied twice, with
   separate counters: replies per sender, and new emails sent in total.
 - It **cannot read or search** your inbox, and it never sends without being asked.
 
@@ -146,7 +155,8 @@ Per chat, the bot keeps (1) conversation history in SQLite, (2) a long-term `MEM
 
 **Saving facts.** The model is told to call `remember` proactively whenever you share a lasting fact (people, preferences,
 routines, projects), without announcing it. Code backs this up: duplicate notes are skipped, and notes that look sensitive
-(passwords, keys, tokens, long card-like numbers) are refused. Only what is in `MEMORY.md` survives `/new`: anything that
+(passwords, keys, tokens, long card-like numbers), or look like standing orders or links ("from now on…", "always send…", URLs), are
+refused, because memory goes into every future prompt. Only what is in `MEMORY.md` survives `/new`: anything that
 was only said in conversation is gone once history and summary are cleared.
 
 **When compaction runs:** after every reply, the bot estimates the chat's size in tokens (characters ÷ `COMPACT_CHARS_PER_TOKEN`,
@@ -176,8 +186,9 @@ sending the reply. `/compact` runs it on demand, `/memory` shows what's remember
 | `EMAIL_ALLOWED` | Addresses the bot answers **and** may email. |
 | `IMAP_ERROR_LOGGER`| Enables IMAP email error logging (set to true to debug email connectivity issues)|
 | `EMAIL_SEND_ANY=true` | Lets it email addresses outside `EMAIL_ALLOWED`. Off by default. |
+| `EMAIL_AUTO_SEND=true` | Lets the model send email without your `/send`. Off by default (safer against prompt injection). |
 | `EMAIL_SEND_VIA` | `imap` or `agentmail`: which mailbox sends new mail when both are configured. |
-| `EMAIL_MAX_REPLIES_PER_HOUR` | Reply cap per sender and cap on emails sent in total. Default 20. |
+| `EMAIL_MAX_PER_HOUR` | Hourly cap on replies per sender and, separately, on emails sent in total. Default 20. |
 | `HISTORY_CHARS` / `COMPACT_*` | History cap (16000) and compaction limits (3500 history tokens, 1500 memory tokens). |
 | `DATA_DIR` | **Leave unset.** Defaults to `./data` natively; Docker sets it to the mounted `/data` itself. |
 
@@ -187,6 +198,7 @@ sending the reply. `/compact` runs it on demand, `/memory` shows what's remember
 | `src/prompts.ts` | **Everything the model reads**: system prompt, tool descriptions, compaction prompts, `/help` text. Text only. |
 | `src/agent.ts` | Commands and the tool loop. |
 | `src/tools.ts` | Tool definitions (schemas) and the code that runs them. |
+| `src/draft-email.ts` | "Draft an email to …": the model fills in to/subject/body, code saves the draft (recipient must appear in the message or memory). |
 | `src/send-mail.ts` | Email drafts, sending, the send-vs-draft rule (`emailIntent`), limits and recipient checks. |
 | `src/mail-core.ts`, `email-imap.ts`, `email-agentmail.ts`, `email.ts` | Email channels (receive and send). |
 | `src/inbound.ts`, `queue.ts` | Shared entry point: batching of photos/text, one job at a time. |
@@ -194,7 +206,7 @@ sending the reply. `/compact` runs it on demand, `/memory` shows what's remember
 | `src/db.ts` | SQLite tables (messages, images, drafts, mail drafts, summaries, seen mail). |
 | `src/post.ts`, `instagram.ts`, `media.ts` | Instagram drafts, publishing, image conversion. |
 | `src/whatsapp.ts`, `telegram.ts` | Chat channels. |
-| `src/llm.ts`, `config.ts`, `cleanup.ts`, `cli.ts`, `index.ts` | LLM client, settings, housekeeping, test CLI, startup. |
+| `src/llm.ts`, `config.ts`, `cleanup.ts`, `cli.ts`, `index.ts` | LLM client, settings, housekeeping, terminal chat (text only), startup. |
 
 Rule of thumb: **text the model reads goes in `prompts.ts`; rules the model must not be able to override** (the email
 send-vs-draft rule, the secret filter, rate limits, `/confirm`) **stay in code.**
@@ -203,6 +215,20 @@ send-vs-draft rule, the secret filter, rate limits, `/confirm`) **stay in code.*
 ```bash
 docker compose up --build      # scan the WhatsApp QR on first run
 ```
+**Terminal chat.** `npm run chat` talks to the same agent as the chat channels: commands (`/help`, `/new`, `/memory`,
+`/compact`, ...), tools, `MEMORY.md`, drafts and compaction all work. It is text only (no images) and keeps its own
+conversation under the chat id `cli`. It reads and writes the same `./data` folder as the bot. While the bot runs in
+Docker, open the terminal chat inside the container instead of on the host, so both use the database from the same
+filesystem:
+
+```bash
+docker compose exec llamaclaw npx tsx src/cli.ts
+```
+
+The container runs hardened (`docker-compose.yml`): non-root user, read-only filesystem (only `/data` and a `/tmp` tmpfs are
+writable), all Linux capabilities dropped, `no-new-privileges`, memory and process limits. If it fails to start or misbehaves,
+disable `read_only` first, then `mem_limit`.
+
 Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://localhost:8787`. Run **either** Docker or
 `npm start` at a time: they share `./data`, and WhatsApp allows only one active session.
 
@@ -216,6 +242,11 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
   HTTPS/mail scanning; natively, `NODE_USE_SYSTEM_CA=1` (Node 22.15+) can make Node trust the system store; in Docker,
   the container can't see your Mac's keychain, so use the exclusion or add the certificate with `NODE_EXTRA_CA_CERTS`.
   Don't disable certificate checking: your mailbox password passes through it.
+- **The bot says it drafted or sent an email but nothing happened.** The log (`docker compose logs`) shows each tool call as
+  `[tools] <chat>: <tool> -> <result>`, each code-made draft as `[draft] <chat>: saved|refused|failed`, and
+  `[tools] <chat>: no tool was called for: …` when the model answered an email-related request without calling any tool (it only
+  *claimed* to act). A real draft always shows a `✉️ Draft email…` block written by the code, and a real send always ends with
+  `✅ Email sent to …`; if you don't see those, nothing was saved or sent.
 - **Docker build fails in `better-sqlite3` with "Python is not set".** npm couldn't download a prebuilt binary and fell back to
   compiling. Retry on a stable connection, or add `python3 make g++` to the image before `npm ci`.
 - **`npm warn deprecated prebuild-install`** is harmless; it comes from `better-sqlite3`.
@@ -235,6 +266,10 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
 - Telegram bot chats are not end-to-end encrypted.
 - Anyone on the allowlists can talk to your model, publish to your Instagram with `/confirm`, and make it send email to the
   addresses in `EMAIL_ALLOWED`. With `EMAIL_SEND_ANY=true` that means any address. Keep the lists tight.
+- **Prompt injection.** Text you paste or forward can contain instructions aimed at the model. The system prompt tells it to treat
+  such text as data, and code refuses to save instruction-like or link-like notes to memory, but a model can still be talked into
+  things. The real protections are in code: email needs your `/send`, Instagram needs `/confirm`, recipients must be in
+  `EMAIL_ALLOWED`. Check `/memory` now and then.
 - Not production-hardened: images and text only (no video/Reels), no encryption of `./data`.
 - Agentmail and Instagram support not fully tested yet.
 - **better-sqlite3** package might give you a warning about a no-longer-supported dependency installed. It comes pre-packaged, you can ignore it and hopefully there will be a new release soon.

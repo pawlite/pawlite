@@ -14,6 +14,10 @@ export type ToolCtx = { draftPreview?: string
   emailIntent?: 'send' | 'draft';
 };
 
+// Notes that read like standing orders or links are refused: memory goes into every future prompt, so it must hold facts only.
+const INSTRUCTION_LIKE =
+  /https?:\/\/|www\.|\b(from now on|whenever|every time|each time|ignore|disregard|override|obey|standing instruction|new instruction|system prompt|you (must|should|will)|always (send|email|forward|cc|reply|post|run|execute|follow|obey)|forget (all|previous|your)|(send|email|forward|cc|bcc)\b.{0,80}\bto\b)/i;
+
 export const chatDir = (chatId: string): string => {
   const dir = path.join(config.dataDir, 'chats', chatId.replace(/[^a-zA-Z0-9._-]/g, '_'));
   fs.mkdirSync(dir, { recursive: true });
@@ -73,11 +77,25 @@ export function toolDefs(): ToolDef[] {
       },
       required: ['to', 'subject', 'body'],
     };
-    defs.push(
-      { type: 'function', function: { name: 'send_email', description: TOOL_TEXT.send_email.description, parameters: emailParameters } },
-      { type: 'function', function: { name: 'draft_email', description: TOOL_TEXT.draft_email.description, parameters: emailParameters } },
-      { type: 'function', function: { name: 'send_draft', description: TOOL_TEXT.send_draft.description, parameters: { type: 'object', properties: {} } } },
-    );
+    if (config.emailAutoSend) {
+      defs.push(
+        { type: 'function', function: { name: 'send_email', description: TOOL_TEXT.send_email.description, parameters: emailParameters } },
+        { type: 'function', function: { name: 'draft_email', description: TOOL_TEXT.draft_email.description, parameters: emailParameters } },
+      );
+    } else {
+      // Drafting only: one tool, so a model that does not call tools for the word "draft" still has the single obvious tool to use.
+      defs.push({
+        type: 'function',
+        function: {
+          name: 'send_email',
+          description: 'Prepare a NEW email to one recipient and save it as a draft the user confirms. Call this whenever the user asks to email, send, draft, write or prepare an email.',
+          parameters: emailParameters,
+        },
+      });
+    }
+    if (config.emailAutoSend) {
+      defs.push({ type: 'function', function: { name: 'send_draft', description: TOOL_TEXT.send_draft.description, parameters: { type: 'object', properties: {} } } });
+    }
   }
   if (config.enableShell) {
     defs.push({
@@ -107,7 +125,8 @@ export async function runTool(chatId: string, name: string, rawArgs: string, ctx
     case 'remember': {
       const note = String(args.note ?? '').trim().slice(0, 500);
       if (!note) return 'Error: empty note.';
-      if (/pass(word|code)|api[ _-]?key|secret|token|\b\d{13,19}\b/i.test(note)) return 'Error: not saving sensitive data. Do not retry.';
+      if (/pass(word|code|[ _-]?phrase)|api[ _-]?key|secret|token|\b\d{13,19}\b/i.test(note)) return 'Error: not saving sensitive data. Do not retry.';
+      if (INSTRUCTION_LIKE.test(note)) return 'Error: not saving instructions or links as memory, only plain facts. Do not retry.';
       const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       if (readMemory(chatId).split('\n').some((l) => norm(l.replace(/^- /, '')) === norm(note))) return 'Already saved.';
       fs.appendFileSync(path.join(chatDir(chatId), 'MEMORY.md'), `- ${note}\n`);
@@ -121,7 +140,7 @@ export async function runTool(chatId: string, name: string, rawArgs: string, ctx
     }
     case 'send_email':
     case 'draft_email': {
-      const mode = ctx.emailIntent ?? (name === 'send_email' ? 'send' : 'draft');
+      const mode = config.emailAutoSend ? (ctx.emailIntent ?? (name === 'send_email' ? 'send' : 'draft')) : 'draft';
       const r = createMailDraft(chatId, String(args.to ?? ''), String(args.subject ?? ''), String(args.body ?? ''), args.attach_images === true);
       if (!r.ok) return `Error: ${r.text}`;
       if (mode === 'send') {
@@ -135,6 +154,7 @@ export async function runTool(chatId: string, name: string, rawArgs: string, ctx
       return 'Draft saved (NOT sent). The user will see it. They can tell you to send it, or reply /send.';
     }
     case 'send_draft': {
+      if (!config.emailAutoSend) return 'Not sent. Only the user can send a draft: they reply /send. Tell them so.';
       const sent = await sendMailDraft(chatId);
       ctx.notice = sent.text;
       return sent.ok ? `${sent.text} It is already delivered. Do not mention /send.` : `Not sent. ${sent.text}`;

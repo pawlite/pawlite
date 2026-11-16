@@ -63,6 +63,7 @@ export const config = {
   emailRequireAuth: bool('EMAIL_REQUIRE_AUTH', true),
   // Sending NEW email (send_email tool + /send). By default only to addresses in EMAIL_ALLOWED.
   emailSendAny: bool('EMAIL_SEND_ANY', false),
+  emailAutoSend: bool('EMAIL_AUTO_SEND', false), // false: the model only drafts; sending needs /send or a bare "send it"
   emailSendVia: env('EMAIL_SEND_VIA').toLowerCase(), // 'imap' | 'agentmail' | '' (auto)
   emailMaxPerHour: posNum('EMAIL_MAX_PER_HOUR', 20), // applied to replies per sender and to emails sent in total
   imapErrorLogger: ["1", "true", "yes", "on"].includes(

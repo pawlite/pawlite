@@ -7,8 +7,11 @@ services:
       # llama-server on the host machine. Taken from .env if set there (use http://host.docker.internal:PORT/v1, not 127.0.0.1).
       LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:8080/v1}
       HTTP_HOST: 0.0.0.0
-      # stores agent memory in the pawlite/data folder
+      # Must match the volume below. Without this, DATA_DIR=./data from .env would point at the container's
+      # own (temporary) filesystem instead of the mounted ./data folder, and everything would be lost on `docker compose down`.
       DATA_DIR: /data
+      # With a read-only filesystem, npm/tsx must not try to write caches or logs into the (read-only) home folder.
+      HOME: /tmp
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -18,8 +21,13 @@ services:
       - ./data:/data
     stdin_open: true
     tty: true   # needed to see the WhatsApp QR code on first run
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+
+    # ---- Hardening (untested: if the container fails to start or misbehaves, disable `read_only` first, then `mem_limit`) ----
+    cap_drop: [ALL]                      # the app needs no Linux capabilities (it runs as the non-root `node` user, port > 1024)
+    security_opt:
+      - no-new-privileges:true           # a process inside cannot gain extra privileges (e.g. via setuid binaries)
+    read_only: true                      # the container's own filesystem is read-only; only /data and the tmpfs below are writable
+    tmpfs:
+      - /tmp:size=256m                   # scratch space for npm/tsx/sharp; wiped on every restart
+    mem_limit: 1g                        # raise it if the container gets killed (out of memory) while processing images
+    pids_limit: 256                      # caps runaway process creation (e.g. a looping shell tool)
