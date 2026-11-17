@@ -94,6 +94,7 @@ Posting uses Meta's official Content Publishing API. You need:
 `IG_USER_ID`, `IG_ACCESS_TOKEN` and `PUBLIC_BASE_URL` must all be set or posting stays disabled.
 
 ## Commands
+
 | Command | What it does |
 |---|---|
 | `/new` | Clears this chat's history and summary. **Keeps `MEMORY.md`.** |
@@ -177,6 +178,7 @@ sending the reply. `/compact` runs it on demand, `/memory` shows what's remember
   default 16,000), so the prompt can't overflow even if compaction hasn't run.
 
 ## Config highlights
+
 | Var | Meaning |
 |---|---|
 | `LLM_THINKING=false` | Sends `enable_thinking=false` (faster on thinking models like Gemma 4). |
@@ -193,6 +195,7 @@ sending the reply. `/compact` runs it on demand, `/memory` shows what's remember
 | `DATA_DIR` | **Leave unset.** Defaults to `./data` natively; Docker sets it to the mounted `/data` itself. |
 
 ## Project layout
+
 | File | Role |
 |---|---|
 | `src/prompts.ts` | **Everything the model reads**: system prompt, tool descriptions, compaction prompts, `/help` text. Text only. |
