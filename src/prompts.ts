@@ -33,7 +33,8 @@ const INSTAGRAM = (waiting: number): string =>
   'That only creates a draft; the user must reply /confirm. Never claim something was posted.';
 
 const EMAIL = (waiting: number): string =>
-  'You CAN send email. When the user asks you to email someone, call send_email with the recipient, subject and body ' +
+  'You CAN send email. When the user asks you to email someone, or to draft, write or prepare an email, ALWAYS call send_email with the recipient, subject and body ' +
+  '(never just write the email in the chat) ' +
   "(the system itself decides whether to send now or save a draft, based on the user's wording, so never ask which). " +
   `One recipient per email. Images the user has sent in this chat: ${waiting}; to include them set attach_images=true. ` +
   'Report only what the tool result says. You cannot read or search the inbox.';

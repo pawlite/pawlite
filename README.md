@@ -11,7 +11,7 @@ publishes the post through Instagram's official Graph API. PawLite is a highly o
 ![PawLite architecture](architecture.svg)
 
 ## Why it's small on purpose
-By default each request sends only a ~180-360 tokens system prompt, the chat's `MEMORY.md`, capped history, and 3 tiny tools.
+By default each request sends only a ~180-360 tokens system prompt, the chat's `MEMORY.md`, capped history, and a bunch tiny tools (150-700 tokens of definitions).
 Compare that with the ~70K tokens an "agent platform" sends per turn: prefill on a local model drops from tens of
 seconds to a second or two.
 
@@ -43,7 +43,7 @@ Settings → Linked Devices. (`PAIRING_PHONE` gives you a code instead of a QR. 
 3. Set `WHATSAPP_ENABLED=false` if you only want Telegram.
 
 ### Email (Gmail and/or AgentMail)
-The bot **polls** the mailbox (default every 120 s), answers mail from addresses in `EMAIL_ALLOWED`, and replies in the
+The agent **polls** the mailbox (default every 120 s), answers mail from addresses in `EMAIL_ALLOWED`, and replies in the
 same thread, marking handled mail as read. It answers people who write to it only if their email is in the `EMAIL_ALLOWED` list; it doesn't read your other personal emails or
 send unprompted mail; it only sends when you ask for it in a chat (see [Sending email](#sending-email)). Image attachments work, so you can email photos to post on Instagram, then reply `/confirm`.
 
@@ -83,7 +83,7 @@ Posting uses Meta's official Content Publishing API. You need:
    Posting to your own account usually works while the app is in development mode; check Meta's current rules.
    Long-lived tokens expire, so plan to refresh them.
 3. A **public HTTPS URL**. Instagram downloads each image from a URL you provide, so it can't read local files.
-   The bot runs a tiny media server on `HTTP_PORT` (default 8787); expose it with a tunnel and set `PUBLIC_BASE_URL`:
+   The agent runs a tiny media server on `HTTP_PORT` (default 8787); expose it with a tunnel and set `PUBLIC_BASE_URL`:
    ```bash
    cloudflared tunnel --url http://localhost:8787     # prints https://something.trycloudflare.com
    ```
@@ -111,7 +111,7 @@ Posting uses Meta's official Content Publishing API. You need:
 1. Send 1–10 photos (as photos or as image files). Quick successions are batched, so albums work.
 2. Say what you want: *"post these to Instagram, caption about our hike"*. The model writes a caption and creates a
    **draft**. Or skip the model with `/post <your caption>`.
-3. The bot shows the exact draft. Reply **`/confirm`** to publish or `/cancel` to discard. Nothing is published without `/confirm`,
+3. The agent shows the exact draft. Reply **`/confirm`** to publish or `/cancel` to discard. Nothing is published without `/confirm`,
    and `/confirm` is handled by code, not by the model, so a confused or manipulated model can't post on its own.
 
 Images are converted to what Instagram requires: sRGB JPEG, ≤1440px wide, under 8 MB, aspect ratio **padded** (white bars)
@@ -119,7 +119,7 @@ into the allowed 4:5–1.91:1 range rather than cropped. Carousels (2–10 image
 image's ratio. Captions are limited to 2,200 characters and 30 hashtags; Instagram allows 100 API posts per 24 hours.
 Unposted images are deleted after 7 days.
 
-Groups: in WhatsApp/Telegram groups the bot answers only when an allowed member mentions it (`@Claw` / `@your_bot`),
+Groups: in WhatsApp/Telegram groups the agent answers only when an allowed member mentions it (`@PawLite` / `@your_bot`),
 and a photo needs that mention in its caption. For multi-image posts, use a direct chat.
 
 ## Sending email
@@ -131,16 +131,17 @@ Works from any channel (WhatsApp, Telegram or email) once Gmail or AgentMail is 
   only fills in recipient, subject and body (`src/draft-email.ts`), and the code saves the draft, so the draft always exists
   when the preview is shown. With a name instead of an address, the address must be in the chat's memory (say *"Anna's email is
   anna@example.com, remember it"*) and still be in `EMAIL_ALLOWED`; the model may not invent one. If it can't find an address,
-  it says so and saves nothing. This path is used while `EMAIL_AUTO_SEND=false`.
+  it says so and saves nothing. This path is used while `EMAIL_AUTO_SEND=false`, for "draft/write/prepare/compose an email …",
+  "send an email to …" and "email <address> that …". Questions, requests with photos, and "send the draft" are left alone.
 - Set `EMAIL_AUTO_SEND=true` to get the old behaviour back: *"Email bob that I'll be late"* then **sends right away**.
 - *"Send these photos to bob@example.com"* → the photos you sent in this chat (up to 10, 20 MB total) go along as
   attachments named `image-1.jpg`, `image-2.jpg`, … They are full-frame copies, not the padded Instagram versions.
 
 **Sending needs your confirmation by default** (`EMAIL_AUTO_SEND=false`), so a prompt injection hidden in pasted or forwarded
-text cannot make the bot send mail. With `EMAIL_AUTO_SEND=true`, **send or draft is decided by your words, not by the model.**
+text cannot make the agent send mail. With `EMAIL_AUTO_SEND=true`, **send or draft is decided by your words, not by the model.**
 Small models pick between tools unreliably, so the code reads your message (`emailIntent` in `src/send-mail.ts`): it **sends by default**, and drafts only if you say draft / write /
 compose / prepare / preview, ask to see it first, or say "don't send". If you also say "send", it sends. A bare "send it"
-is handled by code too, so the model can't invent a new email. After every send the bot appends the real result
+is handled by code too, so the model can't invent a new email. After every send the agent appends the real result
 (`✅ Email sent to …` or the error), so the model's wording can't mislead you.
 
 Rules:
@@ -151,7 +152,7 @@ Rules:
 - It **cannot read or search** your inbox, and it never sends without being asked.
 
 ## Memory and compaction
-Per chat, the bot keeps (1) conversation history in SQLite, (2) a long-term `MEMORY.md` the model writes with its
+Per chat, the agent keeps (1) conversation history in SQLite, (2) a long-term `MEMORY.md` the model writes with its
 `remember` tool, and (3) a running summary of older messages. Compaction keeps (1) and (2) from growing forever.
 
 **Saving facts.** The model is told to call `remember` proactively whenever you share a lasting fact (people, preferences,
@@ -160,7 +161,7 @@ routines, projects), without announcing it. Code backs this up: duplicate notes 
 refused, because memory goes into every future prompt. Only what is in `MEMORY.md` survives `/new`: anything that
 was only said in conversation is gone once history and summary are cleared.
 
-**When compaction runs:** after every reply, the bot estimates the chat's size in tokens (characters ÷ `COMPACT_CHARS_PER_TOKEN`,
+**When compaction runs:** after every reply, the agent estimates the chat's size in tokens (characters ÷ `COMPACT_CHARS_PER_TOKEN`,
 default 4, so it is a rough estimate, not the model's real tokenizer). If a limit is passed, it compacts that chat *after*
 sending the reply. `/compact` runs it on demand, `/memory` shows what's remembered. An optional timer
 (`COMPACT_INTERVAL_MINUTES`, off by default) also sweeps all chats, e.g. after you hand-edit a `MEMORY.md`.
@@ -185,7 +186,7 @@ sending the reply. `/compact` runs it on demand, `/memory` shows what's remember
 | `LLM_TOOLS=false` | No tool definitions. Use `/post <caption>` instead. Good if your model's tool calling is flaky. |
 | `LLM_VISION=true` | Shows new images to the model (≤4, downscaled) so it can write captions. Needs a vision model and `--mmproj`. |
 | `ENABLE_SHELL=true` | Gives the model a bash tool. **Only inside Docker.** |
-| `EMAIL_ALLOWED` | Addresses the bot answers **and** may email. |
+| `EMAIL_ALLOWED` | Addresses the agent answers **and** may email. |
 | `IMAP_ERROR_LOGGER`| Enables IMAP email error logging (set to true to debug email connectivity issues)|
 | `EMAIL_SEND_ANY=true` | Lets it email addresses outside `EMAIL_ALLOWED`. Off by default. |
 | `EMAIL_AUTO_SEND=true` | Lets the model send email without your `/send`. Off by default (safer against prompt injection). |
@@ -220,7 +221,7 @@ docker compose up --build      # scan the WhatsApp QR on first run
 ```
 **Terminal chat.** `npm run chat` talks to the same agent as the chat channels: commands (`/help`, `/new`, `/memory`,
 `/compact`, ...), tools, `MEMORY.md`, drafts and compaction all work. It is text only (no images) and keeps its own
-conversation under the chat id `cli`. It reads and writes the same `./data` folder as the bot. While the bot runs in
+conversation under the chat id `cli`. It reads and writes the same `./data` folder as the agent. While the agent runs in
 Docker, open the terminal chat inside the container instead of on the host, so both use the database from the same
 filesystem:
 
@@ -245,7 +246,7 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
   HTTPS/mail scanning; natively, `NODE_USE_SYSTEM_CA=1` (Node 22.15+) can make Node trust the system store; in Docker,
   the container can't see your Mac's keychain, so use the exclusion or add the certificate with `NODE_EXTRA_CA_CERTS`.
   Don't disable certificate checking: your mailbox password passes through it.
-- **The bot says it drafted or sent an email but nothing happened.** The log (`docker compose logs`) shows each tool call as
+- **The agent says it drafted or sent an email but nothing happened.** The log (`docker compose logs`) shows each tool call as
   `[tools] <chat>: <tool> -> <result>`, each code-made draft as `[draft] <chat>: saved|refused|failed`, and
   `[tools] <chat>: no tool was called for: …` when the model answered an email-related request without calling any tool (it only
   *claimed* to act). A real draft always shows a `✉️ Draft email…` block written by the code, and a real send always ends with
@@ -254,7 +255,7 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
   compiling. Retry on a stable connection, or add `python3 make g++` to the image before `npm ci`.
 - **`npm warn deprecated prebuild-install`** is harmless; it comes from `better-sqlite3`.
 - **`mkdir` error on `DATA_DIR`.** Remove `DATA_DIR` from `.env` (a value like `/data` only exists inside the container).
-- **The bot forgot things after `/new`.** `/new` keeps `MEMORY.md` only. Check `/memory`; if the facts aren't there they were never
+- **The agent forgot things after `/new`.** `/new` keeps `MEMORY.md` only. Check `/memory`; if the facts aren't there they were never
   saved. If you moved the project folder, move its `data/` folder too.
 
 ## Extending
@@ -274,7 +275,7 @@ Data (auth, DB, memory, images) lives in `./data`. Point your tunnel at `http://
   things. The real protections are in code: email needs your `/send`, Instagram needs `/confirm`, recipients must be in
   `EMAIL_ALLOWED`. Check `/memory` now and then.
 - Not production-hardened: images and text only (no video/Reels), no encryption of `./data`.
-- Agentmail and Instagram support not fully tested yet.
+- Agentmail and Instagram support not fully tested yet. Using defensive parsing for Agentmail.
 - **better-sqlite3** package might give you a warning about a no-longer-supported dependency installed. It comes pre-packaged, you can ignore it and hopefully there will be a new release soon.
 - Next release will focus on refactoring and improving  what is already there. Follow the [PawLite GitHub Repository](https://github.com/pawlite/pawlite) for further updates.
 

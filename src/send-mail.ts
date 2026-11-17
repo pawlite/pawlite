@@ -80,10 +80,12 @@ export async function sendMailDraft(chat: string): Promise<{ ok: boolean; text: 
   if (files.some((f) => !fs.existsSync(f.path))) return { ok: false, text: 'An attached image file is missing. Ask me to write the email again.' };
   if (total > MAX_ATTACH_BYTES) return { ok: false, text: `Attachments total ${(total / 1048576).toFixed(1)} MB; the limit is 20 MB. Attach fewer images.` };
   if (overLimit()) return { ok: false, text: `Hourly email limit reached (EMAIL_MAX_PER_HOUR=${config.emailMaxPerHour}). Try later; the draft is kept.` };
+  const t0 = Date.now();
   try {
     // Imported lazily to avoid an import cycle (mail provider -> mail-core -> agent -> tools -> here).
     if (from.via === 'imap') await (await import('./email-imap.js')).sendViaImap(d.to, d.subject, d.body, files);
     else await (await import('./email-agentmail.js')).sendViaAgentMail(d.to, d.subject, d.body, files);
+    console.log(`[mail] ${chat}: sent via ${from.via} in ${Date.now() - t0} ms`);
     sentLog.push(Date.now());
     lastSent.set(chat, { to: d.to, subject: d.subject, at: Date.now() });
     clearMailDraft(chat);

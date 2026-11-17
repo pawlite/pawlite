@@ -9,10 +9,15 @@ type Batch = { texts: string[]; paths: string[]; reply: Reply; timer?: NodeJS.Ti
 const batches = new Map<string, Batch>();
 
 function enqueue(chatId: string, text: string, paths: string[], reply: Reply): void {
+  const queuedAt = Date.now();
+  void reply.typing?.().catch(() => {}); // show "typing" right away, even if another job is still running
   void runExclusive(async () => {
     try {
+      const startedAt = Date.now();
       await reply.typing?.().catch(() => {});
-      await reply.send(await respond(chatId, text, { newImages: paths }));
+      const answer = await respond(chatId, text, { newImages: paths });
+      console.log(`[timing] ${chatId}: waited ${startedAt - queuedAt} ms in the queue, answered in ${Date.now() - startedAt} ms`);
+      await reply.send(answer);
     } catch (e) {
       console.error('Failed handling message:', e);
     }

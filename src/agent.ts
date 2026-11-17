@@ -111,18 +111,21 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
   const ctx: ToolCtx = { emailIntent: emailIntent(text) };
 
   let calledTool = false;
+  const finish = (raw: string): string => {
+    let out = clean(raw);
+    if (ctx.draftPreview) out = ctx.draftPreview; // the model may wrongly say "sent"; the draft preview is the truth
+    if (ctx.notice) out = out ? `${out}\n\n${ctx.notice}` : ctx.notice;
+    out ||= '(no response)';
+    addMessage(chatId, 'assistant', out);
+    scheduleCompaction(chatId); // if this chat is now over its token limits, compact it after this reply
+    return out;
+  };
   try {
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
       const reply = await chatCompletion(messages, tools);
       if (!reply.tool_calls?.length) {
         if (!calledTool && /e-?mail|draft|send/i.test(text)) console.log(`[tools] ${chatId}: no tool was called for: ${text.slice(0, 80).replace(/\s+/g, ' ')}`);
-        let out = clean(typeof reply.content === 'string' ? reply.content : '');
-        if (ctx.draftPreview) out = ctx.draftPreview; // the model may wrongly say "sent"; the draft preview is the truth
-        if (ctx.notice) out = out ? `${out}\n\n${ctx.notice}` : ctx.notice;
-        out ||= '(no response)';
-        addMessage(chatId, 'assistant', out);
-        scheduleCompaction(chatId); // if this chat is now over its token limits, compact it after this reply
-        return out;
+        return finish(typeof reply.content === 'string' ? reply.content : '');
       }
       messages.push(reply);
       for (const call of reply.tool_calls) {
@@ -131,6 +134,7 @@ export async function respond(chatId: string, rawText: string, opts: RespondOpts
         console.log(`[tools] ${chatId}: ${call.function.name} -> ${result.slice(0, 100).replace(/\s+/g, ' ')}`);
         messages.push({ role: 'tool', tool_call_id: call.id, content: result });
       }
+      if (ctx.draftPreview) return finish(''); // the draft preview is the whole reply: skip the extra model round trip
     }
     return 'I got stuck in a tool loop. Try rephrasing, or send /new.';
   } catch (err) {
