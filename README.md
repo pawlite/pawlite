@@ -226,7 +226,7 @@ Docker, open the terminal chat inside the container instead of on the host, so b
 filesystem:
 
 ```bash
-docker compose exec llamaclaw npx tsx src/cli.ts
+docker compose exec pawlite npx tsx src/cli.ts
 ```
 
 The container runs hardened (`docker-compose.yml`): non-root user, read-only filesystem (only `/data` and a `/tmp` tmpfs are

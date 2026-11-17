@@ -33,7 +33,7 @@ export const config = {
   useTools: bool('LLM_TOOLS', true),
   vision: bool('LLM_VISION', false),
   enableShell: bool('ENABLE_SHELL', false),
-  botName: env('BOT_NAME', 'Claw'),
+  botName: env('BOT_NAME', 'Pawlite'),
   historyChars: Number(env('HISTORY_CHARS', '16000')),
 
   // Compaction. Sizes are ESTIMATED tokens (characters / COMPACT_CHARS_PER_TOKEN); /compact always works.
