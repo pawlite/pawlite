@@ -15,6 +15,10 @@ const transporter = (): Transporter =>
     port: config.smtpPort,
     secure: config.smtpPort === 465,
     auth: { user: config.imapUser, pass: config.imapPassword },
+    // A stuck SMTP server must not block the (single) job queue for minutes.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
   });
 
 /** Send a brand-new message from the Gmail/IMAP mailbox. */
